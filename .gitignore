@@ -1,0 +1,21 @@
+# API keys / environment files
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Secrets / credentials
+credentials.json
+*.key
