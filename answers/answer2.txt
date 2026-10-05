@@ -1,4 +1,0 @@
-AI is the broader concept of making
-machines intelligent, while ML is a way
-of achieving AI by allowing machines
-to learn from data

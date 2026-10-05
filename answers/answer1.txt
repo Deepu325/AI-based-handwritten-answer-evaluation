@@ -1,3 +1,0 @@
-Machine learning is a branch of AI where systems
-learn patterns from data rather than following
-explicitly programmed rules
