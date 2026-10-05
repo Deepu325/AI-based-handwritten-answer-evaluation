@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>HandScript AI — Handwritten Answer Evaluator</title>
+  <meta name="description" content="AI-powered handwritten answer sheet evaluation using OCR and Gemini LLM. Upload images and get instant marks and feedback."/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0e1a;
+      --surface:   #111827;
+      --surface2:  #1a2235;
+      --border:    rgba(255,255,255,0.08);
+      --accent:    #6366f1;
+      --accent2:   #8b5cf6;
+      --green:     #10b981;
+      --yellow:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #f1f5f9;
+      --muted:     #64748b;
+      --glow:      rgba(99,102,241,0.25);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── ANIMATED BACKGROUND ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% -10%, rgba(99,102,241,0.18) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 110%, rgba(139,92,246,0.14) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page-wrap { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 0 20px 60px; }
+
+    /* ── HEADER ── */
+    header {
+      text-align: center;
+      padding: 56px 0 40px;
+    }
+    .logo-badge {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      padding: 8px 20px; border-radius: 100px;
+      font-size: 13px; font-weight: 600; color: #a5b4fc;
+      letter-spacing: .5px; margin-bottom: 24px;
+    }
+    .logo-badge span { width: 8px; height: 8px; border-radius: 50%; background: #6366f1; animation: pulse 2s infinite; }
+    header h1 {
+      font-size: clamp(32px, 6vw, 52px);
+      font-weight: 800;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #c7d2fe 0%, #818cf8 40%, #a78bfa 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 14px;
+    }
+    header p { font-size: 17px; color: var(--muted); max-width: 520px; margin: 0 auto; line-height: 1.6; }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+      transition: border-color .3s;
+    }
+    .card:hover { border-color: rgba(99,102,241,0.3); }
+    .card-title {
+      font-size: 13px; font-weight: 700; letter-spacing: 1.2px;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title::before {
+      content: ''; display: block; width: 3px; height: 16px;
+      background: var(--accent); border-radius: 2px;
+    }
+
+    /* ── FORM ELEMENTS ── */
+    label { display: block; font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; }
+    input[type=text], input[type=number] {
+      width: 100%; padding: 12px 16px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; color: var(--text); font-family: 'Inter', sans-serif;
+      font-size: 14px; transition: border-color .2s, box-shadow .2s; outline: none;
+    }
+    input[type=text]:focus, input[type=number]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--glow);
+    }
+    .form-row { display: grid; gap: 16px; }
+    .form-row.two { grid-template-columns: 1fr auto; }
+
+    /* ── DROPZONE ── */
+    .dropzone {
+      border: 2px dashed rgba(99,102,241,0.35);
+      border-radius: 16px;
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .25s;
+      background: rgba(99,102,241,0.04);
+      position: relative;
+      overflow: hidden;
+    }
+    .dropzone:hover, .dropzone.drag-over {
+      border-color: var(--accent);
+      background: rgba(99,102,241,0.1);
+      transform: translateY(-2px);
+    }
+    .dropzone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .dz-icon { font-size: 36px; margin-bottom: 10px; }
+    .dz-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .dz-sub { font-size: 12px; color: var(--muted); }
+    .dz-preview {
+      display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px;
+      justify-content: center;
+    }
+    .dz-thumb {
+      position: relative; width: 90px; height: 90px; border-radius: 10px;
+      overflow: hidden; border: 2px solid rgba(99,102,241,0.4);
+      background: var(--surface2);
+      animation: fadeIn .3s ease;
+    }
+    .dz-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .dz-thumb .dz-name {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.7); font-size: 9px; padding: 3px 4px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-align: center;
+    }
+    .dz-thumb .dz-remove {
+      position: absolute; top: 3px; right: 3px; width: 18px; height: 18px;
+      background: rgba(239,68,68,0.85); border-radius: 50%; border: none;
+      cursor: pointer; color: white; font-size: 10px; display: flex;
+      align-items: center; justify-content: center; line-height: 1;
+      transition: background .2s;
+    }
+    .dz-thumb .dz-remove:hover { background: var(--red); }
+
+    /* ── BUTTON ── */
+    .btn-evaluate {
+      width: 100%; padding: 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border: none; border-radius: 14px; color: white;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      letter-spacing: .4px; transition: all .25s;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      box-shadow: 0 4px 24px rgba(99,102,241,0.35);
+      margin-top: 8px;
+    }
+    .btn-evaluate:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(99,102,241,0.5);
+    }
+    .btn-evaluate:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+    /* ── PROGRESS ── */
+    #progress-section { display: none; }
+    .progress-wrap { background: var(--surface2); border-radius: 100px; height: 6px; overflow: hidden; margin: 12px 0; }
+    .progress-bar { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .4s ease; width: 0%; }
+    .progress-label { font-size: 13px; color: var(--muted); }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; }
+
+    /* ── RESULTS ── */
+    #results-section { display: none; }
+    .question-box {
+      background: var(--surface2); border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 14px; padding: 20px 24px; margin-bottom: 24px;
+    }
+    .question-box .qlabel { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; }
+    .question-box p { font-size: 16px; line-height: 1.6; color: var(--text); }
+
+    .result-cards { display: flex; flex-direction: column; gap: 20px; }
+
+    .result-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 18px; overflow: hidden;
+      animation: slideUp .4s ease;
+    }
+    .result-card.success { border-color: rgba(16,185,129,0.2); }
+    .result-card.error-card { border-color: rgba(239,68,68,0.2); }
+
+    .rc-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px; border-bottom: 1px solid var(--border);
+      flex-wrap: wrap; gap: 12px;
+    }
+    .rc-name { font-size: 16px; font-weight: 700; }
+    .rc-file { font-size: 12px; color: var(--muted); }
+    .rc-badge {
+      padding: 6px 16px; border-radius: 100px;
+      font-size: 15px; font-weight: 800;
+    }
+    .rc-badge.high { background: rgba(16,185,129,0.15); color: var(--green); }
+    .rc-badge.mid  { background: rgba(245,158,11,0.15); color: var(--yellow); }
+    .rc-badge.low  { background: rgba(239,68,68,0.15);  color: var(--red); }
+
+    .rc-body { padding: 24px; }
+
+    /* Metrics grid */
+    .metrics-grid {
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (min-width: 600px) { .metrics-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .metric {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px 12px; text-align: center;
+    }
+    .metric-label { font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    .metric-value { font-size: 22px; font-weight: 800; }
+    .metric-value.good  { color: var(--green); }
+    .metric-value.okay  { color: var(--yellow); }
+    .metric-value.poor  { color: var(--red); }
+
+    /* Final marks hero */
+    .marks-hero {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;
+    }
+    .marks-circle {
+      width: 72px; height: 72px; border-radius: 50%; flex-shrink: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-weight: 800; border: 3px solid;
+    }
+    .marks-circle.high { border-color: var(--green); color: var(--green); background: rgba(16,185,129,0.08); }
+    .marks-circle.mid  { border-color: var(--yellow); color: var(--yellow); background: rgba(245,158,11,0.08); }
+    .marks-circle.low  { border-color: var(--red); color: var(--red); background: rgba(239,68,68,0.08); }
+    .marks-num { font-size: 20px; line-height: 1; }
+    .marks-total { font-size: 11px; opacity: .7; }
+    .marks-info { flex: 1; }
+    .marks-percent { font-size: 28px; font-weight: 800; }
+    .marks-percent.high { color: var(--green); }
+    .marks-percent.mid  { color: var(--yellow); }
+    .marks-percent.low  { color: var(--red); }
+    .marks-desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* Missing concepts */
+    .missing-list { margin-bottom: 16px; }
+    .missing-list h4 { font-size: 12px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--yellow); margin-bottom: 10px; }
+    .missing-item {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 13px; color: #cbd5e1; padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .missing-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); margin-top: 5px; flex-shrink: 0; }
+
+    /* Feedback */
+    .feedback-box {
+      background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 12px; padding: 14px 16px;
+    }
+    .feedback-box h4 { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+    .feedback-box p { font-size: 13px; line-height: 1.6; color: #cbd5e1; }
+
+    /* OCR text collapsible */
+    .ocr-toggle {
+      background: none; border: none; cursor: pointer; color: var(--muted);
+      font-size: 12px; font-family: 'Inter', sans-serif; padding: 8px 0;
+      display: flex; align-items: center; gap: 6px; transition: color .2s;
+    }
+    .ocr-toggle:hover { color: var(--accent); }
+    .ocr-text {
+      display: none; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px; color: #94a3b8;
+      white-space: pre-wrap; word-break: break-word; margin-top: 8px; max-height: 160px; overflow-y: auto;
+    }
+
+    /* Error state */
+    .error-msg {
+      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2);
+      border-radius: 12px; padding: 14px 16px; color: #fca5a5; font-size: 13px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 999;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 20px; font-size: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      animation: slideUp .3s ease;
+      max-width: 340px;
+    }
+    .toast.error { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+
+    /* Select dropdown */
+    select {
+      width: 100%; padding: 12px 16px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 12px; color: var(--text); font-family: 'Inter', sans-serif;
+      font-size: 14px; transition: border-color .2s, box-shadow .2s; outline: none;
+      cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 14px center;
+    }
+    select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+    select option { background: var(--surface2); }
+
+    /* Checklist rows */
+    .chk-row { display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; }
+    .chk-row .chk-icon { font-size:14px; width:18px; text-align:center; }
+    .chk-row.ok   { color:#86efac; }
+    .chk-row.fail { color:#fca5a5; }
+
+    /* Animations */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    @keyframes spin  { to{transform:rotate(360deg)} }
+    @keyframes fadeIn { from{opacity:0;transform:scale(.9)} to{opacity:1;transform:scale(1)} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-badge"><span></span> Powered by Local Ollama + OCR</div>
+    <h1>Handwritten Answer<br>Evaluator</h1>
+    <p>Upload scanned answer sheets — your local AI model reads the handwriting, understands it, and gives marks with detailed feedback. No API key needed.</p>
+  </header>
+
+  <!-- SETTINGS CARD -->
+  <div class="card">
+    <div class="card-title">Configuration</div>
+    <div class="form-row two" style="margin-bottom:0;align-items:end">
+      <div>
+        <label for="model-select">Local Ollama Model</label>
+        <select id="model-select">
+          <option value="">Loading models…</option>
+        </select>
+        <div id="model-status" style="font-size:11px;color:var(--muted);margin-top:6px">Fetching available models from Ollama…</div>
+      </div>
+      <div style="max-width:140px">
+        <label for="total-marks">Total Marks</label>
+        <input type="number" id="total-marks" value="5" min="1" max="100"/>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUESTION CARD -->
+  <div class="card">
+    <div class="card-title">Question</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Upload a handwritten question image <em>or</em> type it directly below.</p>
+
+    <!-- Dropzone Question -->
+    <div class="dropzone" id="dz-question" style="margin-bottom:16px">
+      <input type="file" id="q-file-input" accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff"/>
+      <div class="dz-icon">🖼️</div>
+      <div class="dz-title">Drop question image here</div>
+      <div class="dz-sub">JPG, PNG, BMP, TIFF supported</div>
+      <div class="dz-preview" id="q-preview"></div>
+    </div>
+
+    <label for="question-text">Or type / paste the question</label>
+    <input type="text" id="question-text" placeholder="e.g. What is Machine Learning?"/>
+  </div>
+
+  <!-- ANSWERS CARD -->
+  <div class="card">
+    <div class="card-title">Student Answer Sheets</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Upload one or multiple handwritten answer images. Each file = one student.</p>
+
+    <div class="dropzone" id="dz-answers">
+      <input type="file" id="a-file-input" accept=".jpg,.jpeg,.png,.bmp,.tif,.tiff" multiple/>
+      <div class="dz-icon">📄</div>
+      <div class="dz-title">Drop answer images here</div>
+      <div class="dz-sub" id="a-file-count">Select multiple files at once</div>
+      <div class="dz-preview" id="a-preview"></div>
+    </div>
+  </div>
+
+  <!-- EVALUATE BUTTON -->
+  <div id="preflight" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:16px;display:none">
+    <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Ready to Evaluate?</div>
+    <div id="chk-model"  class="chk-row"></div>
+    <div id="chk-question" class="chk-row"></div>
+    <div id="chk-answers" class="chk-row"></div>
+  </div>
+
+  <button class="btn-evaluate" id="eval-btn" onclick="runEvaluation()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.37 0 4.52.92 6.11 2.42"/></svg>
+    Evaluate Answers with AI
+  </button>
+
+  <!-- INLINE ERROR -->
+  <div id="inline-error" style="display:none;margin-top:12px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:12px;padding:14px 18px;color:#fca5a5;font-size:14px;font-weight:500"></div>
+
+  <!-- PROGRESS -->
+  <div id="progress-section" class="card" style="margin-top:24px">
+    <div class="card-title">Processing</div>
+    <p class="progress-label" id="progress-label">Uploading images…</p>
+    <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results-section" style="margin-top:32px">
+    <div class="question-box" id="q-display" style="display:none">
+      <div class="qlabel">📌 Question</div>
+      <p id="q-display-text"></p>
+    </div>
+    <div class="result-cards" id="result-cards"></div>
+  </div>
+
+</div>
+
+<script>
+  // ── FILE STATE ──
+  let questionFile = null;
+  let answerFiles  = []; // plain array — reliable across all browsers
+
+  // ── DROPZONE SETUP ──
+  function setupDropzone(dzId, inputId, multiple, onFiles) {
+    const dz    = document.getElementById(dzId);
+    const input = document.getElementById(inputId);
+
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', e => {
+      e.preventDefault(); dz.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files).filter(f => isImg(f));
+      onFiles(multiple ? files : [files[0]]);
+    });
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files).filter(f => isImg(f));
+      onFiles(multiple ? files : [files[0]]);
+      // Do NOT reset input.value — keep the FileList alive
+    });
+  }
+
+  function isImg(f) {
+    return f && /\.(jpe?g|png|bmp|tiff?)$/i.test(f.name);
+  }
+
+  // ── QUESTION DROPZONE ──
+  setupDropzone('dz-question', 'q-file-input', false, files => {
+    if (!files[0]) return;
+    questionFile = files[0];
+    renderThumbs('q-preview', [questionFile], false);
+    updateChecklist();
+  });
+
+  document.getElementById('question-text').addEventListener('input', updateChecklist);
+
+  // ── ANSWER DROPZONE ──
+  setupDropzone('dz-answers', 'a-file-input', true, files => {
+    const existing = new Set(answerFiles.map(f => f.name));
+    files.forEach(f => { if (!existing.has(f.name)) answerFiles.push(f); });
+    renderAnswerThumbs();
+  });
+
+  function renderAnswerThumbs() {
+    renderThumbs('a-preview', answerFiles, true);
+    const countEl = document.getElementById('a-file-count');
+    if (answerFiles.length > 0) {
+      countEl.innerHTML = `<strong style="color:var(--accent)">${answerFiles.length} file${answerFiles.length>1?'s':''} selected</strong> — drag more to add`;
+    } else {
+      countEl.textContent = 'Select multiple files at once';
+    }
+    updateChecklist();
+  }
+
+  // ── PREFLIGHT CHECKLIST ──
+  function updateChecklist() {
+    const model       = document.getElementById('model-select').value.trim();
+    const questionTxt = document.getElementById('question-text').value.trim();
+    const hasQ        = !!(questionFile || questionTxt);
+
+    function row(id, ok, okText, failText) {
+      const el = document.getElementById(id);
+      el.className = 'chk-row ' + (ok ? 'ok' : 'fail');
+      el.innerHTML = `<span class="chk-icon">${ok ? '✓' : '✗'}</span> ${ok ? okText : failText}`;
+    }
+
+    row('chk-model',    !!model,              `Model: ${model}`,                       'No Ollama model selected');
+    row('chk-question', hasQ,                 'Question ready',                        'Question missing — upload image or type it');
+    row('chk-answers',  answerFiles.length>0, `${answerFiles.length} answer image(s) loaded`, 'No answer images uploaded yet');
+
+    document.getElementById('preflight').style.display = 'block';
+    clearError();
+  }
+
+  function renderThumbs(containerId, files, isMulti) {
+    const wrap = document.getElementById(containerId);
+    wrap.innerHTML = '';
+    files.forEach((f, i) => {
+      const url = URL.createObjectURL(f);
+      const div = document.createElement('div');
+      div.className = 'dz-thumb';
+      div.innerHTML = `
+        <img src="${url}" alt="${f.name}"/>
+        <div class="dz-name">${f.name}</div>
+        <button class="dz-remove" title="Remove" onclick="removeFile(${i}, ${isMulti})">✕</button>`;
+      wrap.appendChild(div);
+    });
+  }
+
+  function removeFile(idx, isMulti) {
+    if (isMulti) {
+      answerFiles.splice(idx, 1);
+      renderAnswerThumbs();
+    } else {
+      questionFile = null;
+      document.getElementById('q-preview').innerHTML = '';
+      updateChecklist();
+    }
+  }
+
+  // ── ERROR HELPERS ──
+  function showError(msg) {
+    const el = document.getElementById('inline-error');
+    el.textContent = '⚠️  ' + msg;
+    el.style.display = 'block';
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast(msg, true);
+  }
+  function clearError() {
+    document.getElementById('inline-error').style.display = 'none';
+  }
+
+  // ── PROGRESS HELPERS ──
+  function setProgress(pct, label) {
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-label').textContent = label;
+  }
+
+  // ── MAIN EVALUATION ──
+  async function runEvaluation() {
+    const model      = document.getElementById('model-select').value.trim();
+    const totalMarks  = parseInt(document.getElementById('total-marks').value) || 5;
+    const questionTxt = document.getElementById('question-text').value.trim();
+    if (!model)                               return showError('No Ollama model selected. Is Ollama running?');
+    if (!questionFile && !questionTxt)        return showError('Please provide a question image or type it in the text box.');
+    if (answerFiles.length === 0)             return showError('Please upload at least one student answer image.');
+
+    // UI: disable button, show progress
+    const btn = document.getElementById('eval-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner"></div> Evaluating…';
+    document.getElementById('progress-section').style.display = 'block';
+    document.getElementById('results-section').style.display  = 'none';
+    document.getElementById('result-cards').innerHTML = '';
+    setProgress(10, 'Preparing images…');
+
+    // Build form data
+    const fd = new FormData();
+    fd.append('model',       model);
+    fd.append('total_marks', totalMarks);
+    if (questionTxt) fd.append('question_text', questionTxt);
+    if (questionFile) fd.append('question_image', questionFile);
+    answerFiles.forEach(f => fd.append('answer_images[]', f));
+
+    setProgress(30, 'Running OCR on images…');
+
+    try {
+      const res  = await fetch('/api/evaluate', { method: 'POST', body: fd });
+      setProgress(80, `Evaluating with ${model}…`);
+      const data = await res.json();
+
+      clearError();
+      if (!res.ok || data.error) {
+        showError(data.error || `Server error ${res.status}`);
+        resetBtn(btn);
+        return;
+      }
+
+      setProgress(100, 'Done!');
+      setTimeout(() => {
+        document.getElementById('progress-section').style.display = 'none';
+        renderResults(data);
+      }, 600);
+
+    } catch (err) {
+      toast('Network error: ' + err.message, true);
+      resetBtn(btn);
+    }
+  }
+
+  function resetBtn(btn) {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.37 0 4.52.92 6.11 2.42"/></svg> Evaluate Answers with AI`;
+    document.getElementById('progress-section').style.display = 'none';
+  }
+
+  // ── RENDER RESULTS ──
+  function renderResults(data) {
+    document.getElementById('results-section').style.display = 'block';
+
+    // Question display
+    const qBox  = document.getElementById('q-display');
+    const qText = document.getElementById('q-display-text');
+    qText.textContent = data.question;
+    qBox.style.display = 'block';
+
+    const container = document.getElementById('result-cards');
+    container.innerHTML = '';
+
+    data.results.forEach((r, i) => {
+      const card = document.createElement('div');
+
+      if (r.error) {
+        card.className = 'result-card error-card';
+        card.innerHTML = `
+          <div class="rc-header">
+            <div>
+              <div class="rc-name">📄 ${r.student || 'Student ' + (i+1)}</div>
+              <div class="rc-file">${r.filename}</div>
+            </div>
+            <div class="rc-badge low">Error</div>
+          </div>
+          <div class="rc-body">
+            <div class="error-msg">⚠️ ${r.error}</div>
+          </div>`;
+        container.appendChild(card);
+        return;
+      }
+
+      const pct   = r.percentage || 0;
+      const grade = pct >= 70 ? 'high' : pct >= 40 ? 'mid' : 'low';
+      const emoji = pct >= 70 ? '🏆' : pct >= 40 ? '📝' : '⚠️';
+
+      const missingHtml = (r.missing_concepts || []).length > 0
+        ? `<div class="missing-list">
+             <h4>⚠️ Missing Concepts</h4>
+             ${r.missing_concepts.map(c => `<div class="missing-item"><div class="dot"></div>${c}</div>`).join('')}
+           </div>`
+        : `<div class="missing-list" style="margin-bottom:16px">
+             <h4 style="color:var(--green)">✓ All Key Concepts Covered</h4>
+           </div>`;
+
+      function metricClass(v) { return v >= 70 ? 'good' : v >= 40 ? 'okay' : 'poor'; }
+
+      card.className = `result-card success`;
+      card.style.animationDelay = (i * 0.1) + 's';
+      card.innerHTML = `
+        <div class="rc-header">
+          <div>
+            <div class="rc-name">${emoji} ${r.student || 'Student ' + (i+1)}</div>
+            <div class="rc-file">${r.filename}</div>
+          </div>
+          <div class="rc-badge ${grade}">${r.marks} / ${r.total_marks}</div>
+        </div>
+        <div class="rc-body">
+          <!-- Marks hero -->
+          <div class="marks-hero">
+            <div class="marks-circle ${grade}">
+              <div class="marks-num">${r.marks}</div>
+              <div class="marks-total">/${r.total_marks}</div>
+            </div>
+            <div class="marks-info">
+              <div class="marks-percent ${grade}">${pct}%</div>
+              <div class="marks-desc">Final Score · ${grade === 'high' ? 'Excellent' : grade === 'mid' ? 'Satisfactory' : 'Needs Improvement'}</div>
+            </div>
+          </div>
+
+          <!-- Metrics grid -->
+          <div class="metrics-grid">
+            <div class="metric">
+              <div class="metric-label">Correctness</div>
+              <div class="metric-value ${metricClass(r.correctness)}">${r.correctness}%</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Concept Coverage</div>
+              <div class="metric-value ${metricClass(r.concept_coverage)}">${r.concept_coverage}%</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Relevance</div>
+              <div class="metric-value ${metricClass(r.relevance)}">${r.relevance}%</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Completeness</div>
+              <div class="metric-value ${metricClass(r.completeness)}">${r.completeness}%</div>
+            </div>
+          </div>
+
+          ${missingHtml}
+
+          <!-- Feedback -->
+          <div class="feedback-box">
+            <h4>💬 AI Feedback</h4>
+            <p>${r.feedback || 'No feedback available.'}</p>
+          </div>
+
+          <!-- OCR text -->
+          <button class="ocr-toggle" onclick="toggleOcr(this)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Show OCR Extracted Text
+          </button>
+          <pre class="ocr-text">${escHtml(r.ocr_text || '')}</pre>
+        </div>`;
+
+      container.appendChild(card);
+    });
+
+    resetBtn(document.getElementById('eval-btn'));
+    window.scrollTo({ top: document.getElementById('results-section').offsetTop - 20, behavior: 'smooth' });
+  }
+
+  function toggleOcr(btn) {
+    const pre = btn.nextElementSibling;
+    const open = pre.style.display === 'block';
+    pre.style.display = open ? 'none' : 'block';
+    btn.innerHTML = (open ? '👁 Show' : '🙈 Hide') + ' OCR Extracted Text';
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function toast(msg, isErr) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (isErr ? ' error' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+
+  // ── LOAD OLLAMA MODELS ON PAGE START ──
+  async function loadModels() {
+    const sel    = document.getElementById('model-select');
+    const status = document.getElementById('model-status');
+    try {
+      const res  = await fetch('/api/models');
+      const data = await res.json();
+      if (data.models && data.models.length > 0) {
+        // Sort so qwen3:8b appears first
+        const sorted = [...data.models].sort((a, b) => {
+          if (a === 'qwen3:8b') return -1;
+          if (b === 'qwen3:8b') return 1;
+          return a.localeCompare(b);
+        });
+        sel.innerHTML = sorted.map(m =>
+          `<option value="${m}" ${m === 'qwen3:8b' ? 'selected' : ''}>${m}</option>`
+        ).join('');
+        status.textContent = `${data.models.length} model(s) available \u2014 using qwen3:8b`;
+        status.style.color = 'var(--green)';
+      } else {
+        sel.innerHTML = '<option value="">No models found</option>';
+        status.textContent = 'No Ollama models found. Run: ollama pull qwen3:8b';
+        status.style.color = 'var(--red)';
+      }
+    } catch (e) {
+      sel.innerHTML = '<option value="">Ollama not reachable</option>';
+      status.textContent = 'Cannot connect to Ollama. Make sure it is running.';
+      status.style.color = 'var(--red)';
+    }
+  }
+
+  loadModels();
+</script>
+</body>
+</html>

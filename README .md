@@ -456,7 +456,21 @@ The complete project can be represented as:
 
 # 14. API Configuration
 
-The OCR system uses an OCR.space API key.
+The OCR system uses an OCR.space API key. The web application reads it from
+the `OCR_SPACE_API_KEY` environment variable and tries OCR.space engines 3 and
+2 in sequence. If the variable is not set, it uses OCR.space's shared
+`helloworld` demo key, which may be rate-limited or less reliable.
+
+In PowerShell, set your own key before starting the web app:
+
+``` powershell
+$env:OCR_SPACE_API_KEY = "YOUR_OCR_SPACE_API_KEY"
+python app.py
+```
+
+Use a sharp, well-lit, upright image with the writing filling most of the
+frame. Trying both engines cannot guarantee recognition of difficult
+handwriting; the app reports both engine errors when neither returns text.
 
 The final LLM evaluation system uses a Gemini API key stored as an
 environment variable.
